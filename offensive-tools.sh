@@ -289,7 +289,9 @@ function install-tools () {
 
 function setPermissions() {
     find /usr/share/wordlists/ -exec chown -v -R ${user}:${user} {} +
-    find ${optdir}/ -exec chown -v -R ${user}:${user} {} \;
+    
+    find ${optdir}/impacket -exec chown -v -R ${user}:${user} {} \;
+    find ${optdir}/pspy -exec chown -v -R ${user}:${user} {} \;
 }
 
 function helpMessagePPA () {
