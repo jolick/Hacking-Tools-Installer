@@ -6,7 +6,7 @@
 #--- Note: Most of the tools that will be git clone will be placed in the directory "$outdir", in exception to wordlists which will be placed in /usr/share/wordlists and pratical tools like impacket, webshells which will be placed in $optdir
 
 #--- for a more pratical use
-outdir="/usr/share"    # files of tools
+outdir="/usr/share"    # where to save files of tools
 optdir="/opt"          # where commonly used tools will go to
 
 #--- your user
