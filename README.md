@@ -9,9 +9,9 @@ If you want to install all tools that parrotOS has, you should be able to simply
  
 # How to use
 To use this script follow all the steps one by one.  
-![Script](images/script.png)
+![Script](script.png)
 
-Some downloads will fail when doing step **4**, just do step 3 again until all are installed.
+Some downloads will fail when doing step **4**, just do step 4 again until all are installed.
 
 # Step 3 is done manually
 This must be done. If you upgrade without doing this, your system will break.
