@@ -2,11 +2,12 @@
 Installs PPA and commonly used tools from parrotOS in ubuntu
 
 # Why
-This script is simply a personal script that installs some default tools like nmap, masscan, etc using parrotOS PPA, this is, adding the tools to apt and then apt installing them. 
+This script is simply a personal script that installs some default tools like nmap, masscan, etc using parrotOS PPA, this is, adds the tools to apt and then apt installs them. 
 
-You can remove and add any tools that you like, before installing.
 If you want to install all tools that parrotOS has, you should be able to simply do `sudo apt-get install parrot-tools-full` instead of step **4** (didn't test).
- 
+
+After step 3 you will have all parrot tools in apt, so you can install normally as if you were in parrotOS.
+
 # How to use
 To use this script follow all the steps one by one.  
 ![Script](script.png)
