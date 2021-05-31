@@ -1,5 +1,7 @@
 # ParrotSec-Tools-Installer
-Installs PPA and commonly used tools from parrotOS in ubuntu
+Installs PPA and commonly used tools from parrotOS in ubuntu.
+
+**I strongly suggest you to test in a vm, before running... Your os might break**
 
 # Why
 This script is simply a personal script that installs some default tools like nmap, masscan, etc using parrotOS PPA, this is, adds the tools to apt and then apt installs them. 
@@ -39,6 +41,3 @@ Pin-Priority: 700
 
 # Tested on
 + Ubuntu 20.04
-
-I strongly suggest you to test in a vm, before running... Your os might break
-
