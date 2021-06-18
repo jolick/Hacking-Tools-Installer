@@ -133,7 +133,7 @@ function install-tools () {
           sshuttle apt-file apt-show-versions sqlmap sqlite3 ssldump fcrackzip john hydra cewl crunch hashid \
           flasm nasm wfuzz dmitry nfs-common hping3 ncat dnsenum binwalk smbmap gparted \
           enum4linux wireshark joomscan rubygems commix nikto exploitdb wfuzz hashcat \
-          smtp-user-enum websploit amap ssldump whois socat nishang traceroute dnsutils dnsrecon)
+          smtp-user-enum websploit amap ssldump whois socat nishang traceroute dnsutils dnsrecon mysql-server)
 
   for x in ${tools[@]}; do echo -e "\n\n ${GREEN}[+]${RESET} Installing ${GREEN}${x}${RESET}"; apt-get -y -qq install ${x} || echo -e ' '${RED}'[!] Issue with apt-get'${RESET} 1>&2; done
 
