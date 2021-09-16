@@ -37,7 +37,7 @@ Pin-Priority: 50
 
 Package: *
 Pin: release o=Ubuntu
-Pin-Priority: 700
+Pin-Priority: 1001
 ```
 
 # Tested on
