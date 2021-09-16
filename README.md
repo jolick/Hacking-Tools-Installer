@@ -43,4 +43,6 @@ Pin-Priority: 1001
 # Tested on
 + Ubuntu 20.04
 
+# Issues
 
+if you get 404 error codes when trying to dist-upgrade, try to change the mirror in your `/etc/apt/sources.list.d/parrot.list` to one that has the files.
