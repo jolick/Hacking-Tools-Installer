@@ -1,11 +1,11 @@
 # ParrotSec-Tools-Installer
-Installs PPA and commonly used tools from parrotOS in ubuntu.  
+Installs parrotOS repository and commonly used tools from parrotOS in ubuntu.  
 By following all steps you will have all tools available in parrot when using apt and be able to update tools with apt update and upgrade.
 
 ### **I strongly suggest you to test in a vm, before running... Your os might break**
 
 # Why
-This script is simply a personal script that installs some default tools like nmap, masscan, etc using parrotOS PPA, this is, adds the tools to apt and then apt installs them.
+This script is simply a personal script that installs some default tools like nmap, masscan, etc using parrotOS repository, this is, adds the tools to apt and then apt installs them.
 
 If you want to install all tools that parrotOS has, you should be able to simply do `sudo apt-get install parrot-tools-full` instead of step **4** (didn't test).
 
