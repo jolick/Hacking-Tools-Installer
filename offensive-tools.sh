@@ -270,14 +270,23 @@ function install-tools () {
   fi
   
   ##### Metasploit-framework
-  echo -e "\n${YELLOW} [i]${RESET} Installing ${GREEN}postgresql${RESET}"
-  sudo apt update && sudo apt-get install -y postgresql postgresql-client || echo -e ' '${RED}'[!] Issue with apt-get'${RESET} 1>&2
-  sudo service postgresql start && sudo update-rc.d postgresql enable
+  #echo -e "\n${YELLOW} [i]${RESET} Installing ${GREEN}postgresql${RESET}"
+  #sudo apt update && sudo apt-get install -y postgresql postgresql-client || echo -e ' '${RED}'[!] Issue with apt-get'${RESET} 1>&2
+  #sudo service postgresql start && sudo update-rc.d postgresql enable
   echo -e "\n${YELLOW} [i]${RESET} Installing ${GREEN}Metasploit-framework${RESET}"
-  apt-get -y -qq install metasploit-framework || echo -e ' '${RED}'[!] Issue with apt-get'${RESET} 1>&2
+  # Note: metasploit package from parrot OS repo is broken so the installation is via the suggested from rapid7
+  # apt-get -y -qq install metasploit-framework || echo -e ' '${RED}'[!] Issue with apt-get'${RESET} 1>&2
+  # Instaliing recomendend from metasploit github
+  # https://github.com/rapid7/metasploit-framework/wiki/Nightly-Installers
+  curl https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb > msfinstall
+  chmod 755 msfinstall
+  ./msfinstall
+  rm msfinstall
+ 
   echo -e "\n${YELLOW} [i]${RESET} Configuring ${GREEN}Metasploit-framework${RESET}..."
   msfdb init
-
+  
+  
   ##### burpsuite how to install
   echo -e "\n\n${YELLOW} [i]${RESET} How to install ${GREEN}burpsuite${RESET}"
   echo -e "${YELLOW} [i]${RESET} Download from ${GREEN}https://portswigger.net/burp/releases${RESET}"
@@ -308,20 +317,21 @@ function helpMessagePPA () {
 ##### Initial menu
 function menu () {
     #install
-    echo -e '\n '${YELLOW}'[i] Some downloads will fail, repeat step 3 until all are installed'${RESET}
+    echo -e '\n '${YELLOW}'[i] Some downloads will fail, repeat step 4 until all are installed'${RESET}
     echo -e '\n '${YELLOW}'[i]'${RESET}' '${BOLD}'Install - Choose one by one in order'${RESET}
     echo -e ' '${BLUE}'[1]'${RESET}" Update and upgrade"
     echo -e ' '${BLUE}'[2]'${RESET}" Add parrot-tools to apt"
     echo -e ' '${BLUE}'[3]'${RESET}" Change PPA permissions manually"
-    echo -e ' '${BLUE}'[4]'${RESET}" Install tools"
-    echo -e ' '${BLUE}'[5]'${RESET}" Clean system"
-    echo -e ' '${BLUE}'[6]'${RESET}" Set folders permissions"
+    echo -e ' '${BLUE}'[4]'${RESET}" Update and upgrade"
+    echo -e ' '${BLUE}'[5]'${RESET}" Install tools"
+    echo -e ' '${BLUE}'[6]'${RESET}" Clean system"
+    echo -e ' '${BLUE}'[7]'${RESET}" Set folders permissions"
     
     echo -e '\n '${BLUE}'[q]'${RESET}" exit\n"
     read -e -p  "$(echo -e ' '${BOLD}'[>]'${RESET}' ')" opt
 
     case $opt in
-      "1")
+      "1" | "4")
           update
           upgrade
           echo -e "\n ${BLUE}[*]${RESET} Done\n"
@@ -336,17 +346,17 @@ function menu () {
           helpMessagePPA
           menu
         ;;
-      "4")
+      "5")
           clear
           install-tools
           menu
         ;;
-      "5")
+      "6")
           echo
           cleanSystem
           menu
         ;;
-      "6")
+      "7")
           echo -e "\n ${BLUE}[*]${RESET} Setting permissions... This might take a while\n"
           setPermissions
           menu
