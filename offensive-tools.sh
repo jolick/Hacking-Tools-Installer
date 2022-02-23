@@ -277,6 +277,7 @@ function install-tools () {
    
     cd theHarvester
     python3 -m pip install -r requirements/base.txt
+    mv theHarvester /etc/theHarvester
     echo "export PATH=$PATH:/etc/theHarvester" >> ~/.bashrc
   fi
   
