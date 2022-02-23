@@ -258,7 +258,7 @@ function install-tools () {
   else
     git clone -q https://github.com/flozz/p0wny-shell /usr/share/webshells/p0wny-shell || echo -e ' '${RED}'[!] Issue when git cloning'${RESET} 1>&2
   fi
-
+ 
   ##### clone pspy
   echo -e "\n\n ${GREEN}[+]${RESET} Cloning ${GREEN}pspy${RESET} ~ Monitor linux processes without root permissions "
   if [ -d ${optdir}/pspy ];then
@@ -267,6 +267,18 @@ function install-tools () {
     mkdir -p ${optdir}/pspy
     wget -qc https://github.com/DominicBreuker/pspy/releases/download/v1.2.0/pspy32 -O ${optdir}/pspy/pspy32 || echo -e ' '${RED}'[!] Issue with download'${RESET} 1>&2
     wget -qc https://github.com/DominicBreuker/pspy/releases/download/v1.2.0/pspy64 -O ${optdir}/pspy/pspy64 || echo -e ' '${RED}'[!] Issue with download'${RESET} 1>&2
+  fi
+  
+  ##### Clone theHarvester
+  echo -e "\n\n ${GREEN}[+]${RESET} Cloning ${GREEN}theHarvester${RESET} ~ E-mails, subdomains and names Harvester - OSINT "
+  if [ -d /etc/theHarvester ];then
+    echo -e "${YELLOW} [i]${RESET} Already installed"
+  else
+    git clone -q https://github.com/laramies/theHarvester || echo -e ' '${RED}'[!] Issue when git cloning'${RESET} 1>&2
+   
+    cd theHarvester
+    python3 -m pip install -r requirements/base.txt
+    echo "export PATH=$PATH:/etc/theHarvester" >> ~/.bashrc
   fi
   
   ##### Metasploit-framework
