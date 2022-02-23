@@ -114,7 +114,6 @@ function cleanSystem () {
 function install-tools () {
   #create oudir directory
   mkdir -p ${outdir} 
-  mkdir -p ${optdir}/shells 
   mkdir -p /usr/share/wordlists/
   cd ${outdir}
 
