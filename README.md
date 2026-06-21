@@ -3,7 +3,7 @@ Installs commonly used offensive tools on a fresh Ubuntu, without installing the
 
 Most tools come from Ubuntu's own repos. Python tools go through `uv`. The Kali repo is added too, but pinned low, so you can `apt install` any extra tool later without breaking the system.
 
-*This script was made for a fresh Ubuntu*. If running on existing VM, I recommend doing a snapshot before. The pinning is built around a clean Ubuntu base, so run it on a new install, not on top of a system that already mixes other distro repos.
+**This script was made for a fresh Ubuntu**. If running on existing VM, I recommend doing a snapshot before. The pinning is built around a clean Ubuntu base, so run it on a new install, not on top of a system that already mixes other distro repos.
 
 ## Why
 A personal script to turn a plain Ubuntu into a working pentest box: nmap, masscan, sqlmap, impacket, BloodHound, wordlists, etc. The idea is to avoid running full Kali but still have its tools one `apt install` away.
