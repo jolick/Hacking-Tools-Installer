@@ -3,16 +3,66 @@
 # Author: Joel Russo - jolick
 
 ##### settings
-#--- Note: Most of the tools that will be git clone will be placed in the directory "$outdir", in exception to wordlists which will be placed in /usr/share/wordlists and pratical tools like impacket, webshells which will be placed in $optdir
+#--- Note: Tools come from Ubuntu (apt) or via uv (python). Kali repo is added but pinned low,
+#--- only as fallback for tools Ubuntu doesn't have. Core libs are blocked from Kali to not break the host.
 
 #--- for a more pratical use
 outdir="/usr/share"    # where to save files of tools
-optdir="/opt"          # where commonly used tools will go to
+optdir="/opt/tools"    # commonly used tools, user-writable
 
 #--- your user
-user=$(who am i | awk '{print $1}') #current user running script
+user="${SUDO_USER:-$(logname)}"   # user that called sudo
+userhome=$(getent passwd "${user}" | cut -d: -f6)
 #--- or if you want to set another user
 #user="joel"
+
+
+####################################################
+##### What to install ~ edit these lists, comment a line to skip a tool
+
+#--- dependencies and languages (apt)
+deps=( curl git wget gpg ca-certificates build-essential gdb binutils \
+       p7zip-full unzip zip gzip \
+       ruby ruby-dev \
+       python3 python3-dev libssl-dev libffi-dev \
+       plocate openssl xsel )
+
+#--- tools (apt; some come from the Kali repo)
+tools=( vim tmux nmap masscan onesixtyone htop network-manager-openvpn \
+        network-manager-vpnc network-manager-openconnect gobuster network-manager-iodine hashid cewl proxychains4 \
+        sshuttle sqlmap sqlite3 fcrackzip john hydra crunch \
+        nasm nfs-common hping3 ncat dnsenum binwalk smbmap ffuf feroxbuster \
+        enum4linux wireshark joomscan nikto exploitdb hashcat responder \
+        smtp-user-enum whois socat traceroute dnsutils dnsrecon )
+
+#--- ruby gems
+gems=( evil-winrm wpscan )
+
+#--- python tools (uv)
+uvtools=(
+  impacket
+  pwntools
+  bloodhound-ce                                 # BloodHound.py CE collector
+  bloodyAD
+  coercer                                       # superset of PetitPotam
+  certipy-ad                                    # ADCS attacks
+  mitm6
+  ldapdomaindump
+  droopescan
+  git+https://github.com/laramies/theHarvester  # not on pypi
+  git+https://github.com/Pennyw0rth/NetExec     # netexec
+  git+https://github.com/cddmp/enum4linux-ng    # not on pypi
+)
+
+#--- go tools (prebuilt release):  repo | asset-grep | type (raw/gz/tar/zip) | outname
+gotools=(
+  "ropnop/kerbrute|kerbrute_linux_amd64|raw|kerbrute"
+)
+
+#--- extra components (true/false)
+install_bloodhound=true
+install_ghidra=true
+install_burp=true
 
 
 ####################################################
@@ -25,21 +75,28 @@ BLUE="\033[01;34m"     # Heading
 BOLD="\033[01;01m"     # Highlight
 RESET="\033[00m"       # Normal
 
+##### Message helpers
+err  () { echo -e ' '${RED}'[!] '"${*}"${RESET} 1>&2; }   # [!] problem (stderr)
+info () { echo -e " ${YELLOW}[i]${RESET} ${*}"; }          # [i] note
+ok   () { echo -e "\n ${GREEN}[+]${RESET} ${*}"; }         # [+] doing something
+hdr  () { echo -e "\n ${BLUE}[*]${RESET} ${*}"; }          # [*] heading / done
+
 ##### Auto-completion in read
 
-#bind TAB:menu-complete
-set -o emacs
-bind 'set show-all-if-ambiguous on'
-bind 'set completion-ignore-case on'
-bind 'TAB:dynamic-complete-history'
+# only in an interactive shell (bind errors under sudo)
+if [[ $- == *i* ]]; then
+    #bind TAB:menu-complete
+    set -o emacs
+    bind 'set show-all-if-ambiguous on'
+    bind 'set completion-ignore-case on'
+    bind 'TAB:dynamic-complete-history'
 
-# Available comands to autocomplete
-cmds="exit q 1 2 3 4 5 6 "
-
-for i in $cmds ; do
-    history -s $i
-done
-
+    # Available comands to autocomplete
+    cmds="exit q U A 1 2 3 4 5 "
+    for i in $cmds ; do
+        history -s $i
+    done
+fi
 
 
 #--Start--------------------------------------------------------------#
@@ -47,340 +104,427 @@ done
 ##### running as root
 function checkroot () {
     if [[ ${EUID} -ne 0 ]]; then
-          echo -e ' '${RED}'[!]'${RESET}" This script must be ${RED}run as root${RESET}. Quitting..." 1>&2
-          exit 1
+        err "This script must be ${RED}run as root${RESET}. Quitting..."
+        exit 1
     else
-        echo -e " ${BLUE}[*]${RESET} ${BOLD}Parrot tools post fresh install ${RESET}"
+        hdr "${BOLD}Hacking tools post fresh install ${RESET}"
     fi
 }
 
 
 ##### update and upgrade sistem
 function update () {
-    echo -e "\n\n ${GREEN}[+]${RESET} ${GREEN}Updating system...${RESET}"
-    apt-get -y -qq update || echo -e ' '${RED}'[!] Issue with apt-get'${RESET} 1>&2
+    ok "${GREEN}Updating system...${RESET}"
+    apt -y -qq update || err 'Issue with apt'
 }
 
 function upgrade () {
-    echo -e "\n\n ${GREEN}[+]${RESET} ${GREEN}Upgrading system...${RESET}"
-    apt-get -y -qq dist-upgrade || echo -e ' '${RED}'[!] Issue with apt-get'${RESET} 1>&2
+    # apt-get upgrade never downgrades/removes, just holds back
+    ok "${GREEN}Upgrading system...${RESET}"
+    apt-get -y -qq upgrade || err 'Issue with apt'
 }
 
 function checkInternet () {
-    echo -e "\n ${GREEN}[+]${RESET} Checking ${GREEN}Internet access${RESET}"
+    ok "Checking ${GREEN}Internet access${RESET}"
     for i in {1..10}; do ping -c 1 -W ${i} www.google.com &>/dev/null && break; done
     if [[ "$?" -ne 0 ]]; then
-      echo -e ' '${RED}'[!]'${RESET}" ${RED}No Internet access${RESET}. Manually fix the issue & re-run the script" 1>&2
-      if [[ $(sudo dmidecode -s system-manufacturer) == "innotek GmbH" ]]; then
-        echo -e " ${YELLOW}[i]${RESET} VM Detected. ${YELLOW}Try switching network adapter mode${RESET} (NAT/Bridged)"
-        echo -e ' '${RED}'[!]'${RESET}" Quitting..." 1>&2
+      err "${RED}No Internet access${RESET}. Manually fix the issue & re-run the script"
+      if [[ $(systemd-detect-virt) != "none" ]]; then
+        info "VM Detected. ${YELLOW}Try switching network adapter mode${RESET} (NAT/Bridged)"
+        err "Quitting..."
         exit 1
       fi
     else
-      echo -e " ${YELLOW}[i]${RESET} ${YELLOW}Detected Internet access${RESET}" 1>&2
+      info "${YELLOW}Detected Internet access${RESET}"
     fi
     echo
 }
 
-##### Add parrot repository
-function addTools () {
-    file="/etc/apt/sources.list.d/parrot.list"
-    echo "deb https://deb.parrotlinux.org/parrot/ rolling main contrib non-free" > ${file}
-    echo "#deb-src https://deb.parrotlinux.org/parrot/ rolling main contrib non-free" >> ${file}
-    echo "deb https://deb.parrotlinux.org/parrot/ rolling-security main contrib non-free" >> ${file}
-    echo "#deb-src https://deb.parrotlinux.org/parrot/ rolling-security main contrib non-free" >> ${file}
-    #--- Add key
-    echo -e "\n\n ${GREEN}[+]${RESET} Installing ${GREEN}Parrot gpg and keyring${RESET}"
-    wget -qO - http://archive.parrotsec.org/parrot/misc/parrotsec.gpg | apt-key add -
-    apt-get -y -qq update
-    apt-get -y -qq install apt-parrot parrot-archive-keyring --no-install-recommends
+##### Add Kali repository
+function addKaliRepo () {
+    #--- prereqs (runs before the deps step)
+    apt -y -qq install curl gpg ca-certificates || err 'Issue with apt'
+
+    ok "Installing ${GREEN}Kali keyring${RESET}"
+    install -d -m 0755 /etc/apt/keyrings
+    curl -fsSL https://archive.kali.org/archive-keyring.gpg \
+      | gpg --dearmor \
+      | tee /etc/apt/keyrings/kali-archive-keyring.gpg > /dev/null \
+      || err 'Issue downloading Kali keyring'
+
+    file="/etc/apt/sources.list.d/kali.sources"
+    echo "Types: deb" > ${file}
+    echo "URIs: http://http.kali.org/kali" >> ${file}
+    echo "Suites: kali-rolling" >> ${file}
+    echo "Components: main contrib non-free non-free-firmware" >> ${file}
+    echo "Signed-By: /etc/apt/keyrings/kali-archive-keyring.gpg" >> ${file}
+
+    setPinning
+    apt -y -qq update
+}
+
+##### Pin the Kali repo
+# Kali below Ubuntu, and core libs pinned negative so they never come from Kali
+function setPinning () {
+    file="/etc/apt/preferences.d/kali-pinning"
+    echo "Package: *" > ${file}
+    echo "Pin: release o=Kali" >> ${file}
+    echo "Pin-Priority: 100" >> ${file}
+    echo "" >> ${file}
+    echo "Package: libc6 libc-bin libc6-dev libstdc++6 libssl* libgcc-s1 libgmp* zlib1g systemd* udev" >> ${file}
+    echo "Pin: release o=Kali" >> ${file}
+    echo "Pin-Priority: -1" >> ${file}
 }
 
 ##### Clean the system
 function cleanSystem () {
-  echo -e "\n ${GREEN}[+]${RESET} ${GREEN}Cleaning${RESET} the system"
-  #echo -e ' '${YELLOW}'[i]'${RESET}" removing parrot keys..."
-  #rm -rf /etc/apt/sources.list.d/parrot.list
-  #--- Clean package manager
-  for FILE in clean autoremove; do apt-get -y -qq "${FILE}"; done         # Clean up - clean remove autoremove autoclean
-  apt-get -y -qq purge $(dpkg -l | tail -n +6 | egrep -v '^(h|i)i' | awk '{print $2}')   # Purged packages
-  #--- Update slocate database
-  sudo updatedb
-  #--- Reset folder location
-  cd ~
+  ok "${GREEN}Cleaning${RESET} the system"
+  for FILE in clean autoremove autoclean; do apt -y -qq "${FILE}"; done
+  updatedb
+  cd ~ || return
 }
 
-##### Install tools
-function install-tools () {
-  #create oudir directory
-  mkdir -p ${outdir} 
+##### uv - python tool manager
+function installUv () {
+  if sudo -u ${user} bash -lc 'export PATH="$HOME/.local/bin:$PATH"; command -v uv' &>/dev/null; then
+    info "uv already installed"
+  else
+    ok "Installing ${GREEN}uv${RESET}"
+    sudo -u ${user} bash -lc 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+  fi
+}
+
+#--- install a python tool with uv, as the user
+function uvInstall () {
+  ok "Installing ${GREEN}${1}${RESET} ~ uv"
+  # pin python 3.12, 3.14 breaks some builds
+  sudo -u ${user} bash -lc "export PATH=\"\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH\"; uv tool install --python 3.12 ${1}" || err "Issue with uv ${1}"
+}
+
+##### BloodHound CE via docker (bloodhound-cli)
+function installBloodHound () {
+  ok "Installing ${GREEN}BloodHound CE${RESET} ~ docker + bloodhound-cli"
+  #--- docker + compose v2
+  apt -y -qq install docker.io docker-compose-v2 || err 'Issue with apt'
+  systemctl enable --now docker
+  usermod -aG docker ${user}
+  #--- bloodhound-cli wraps docker compose
+  if [ -f ${optdir}/bloodhound/bloodhound-cli ];then
+    info "Already installed"
+  else
+    mkdir -p ${optdir}/bloodhound
+    cd ${optdir}/bloodhound || return
+    wget -qc https://github.com/SpecterOps/bloodhound-cli/releases/latest/download/bloodhound-cli-linux-amd64.tar.gz -O bloodhound-cli.tar.gz || err 'Issue with download'
+    tar -xzf bloodhound-cli.tar.gz
+    rm -f bloodhound-cli.tar.gz
+    ./bloodhound-cli install
+  fi
+}
+
+##### Ghidra 
+function installGhidra () {
+  ok "Installing ${GREEN}Ghidra${RESET} ~ reverse engineering suite"
+  apt -y -qq install openjdk-21-jdk || err 'Issue with apt'
+  if [ -d ${optdir}/ghidra ];then
+    info "Already installed"
+  else
+    #--- grab the latest PUBLIC zip from the api
+    url=$(curl -s https://api.github.com/repos/NationalSecurityAgency/ghidra/releases/latest | grep browser_download_url | grep PUBLIC | cut -d '"' -f4)
+    wget -qc "${url}" -O /tmp/ghidra.zip || err 'Issue with download'
+    unzip -q /tmp/ghidra.zip -d ${optdir}/
+    mv ${optdir}/ghidra_*_PUBLIC ${optdir}/ghidra
+    rm -f /tmp/ghidra.zip
+    info "run it with ${GREEN}${optdir}/ghidra/ghidraRun${RESET}"
+    makeDesktop Ghidra "${optdir}/ghidra/ghidraRun" "${optdir}/ghidra/support/ghidra.ico" "Development;Security;"
+  fi
+}
+
+##### Burp Suite Community 
+function installBurp () {
+  ok "Installing ${GREEN}Burp Suite Community${RESET}"
+  if [ -d ${optdir}/burpsuite ];then
+    info "Already installed"
+  else
+    #--- always the latest community linux installer
+    curl -fsSL "https://portswigger.net/burp/releases/download?product=community&type=Linux" -o /tmp/burp.sh || err 'Issue with download'
+    chmod +x /tmp/burp.sh
+    #--- install4j unattended install into /opt/tools
+    /tmp/burp.sh -q -dir ${optdir}/burpsuite -overwrite
+    rm -f /tmp/burp.sh
+    info "run it with ${GREEN}${optdir}/burpsuite/BurpSuiteCommunity${RESET}"
+    info "For Pro grab it from ${GREEN}https://portswigger.net/burp/releases${RESET}"
+  fi
+}
+
+#--- desktop launcher ($1 name, $2 exec, $3 icon, $4 categories)
+function makeDesktop () {
+  f="/usr/share/applications/${1}.desktop"
+  echo "[Desktop Entry]" > "$f"
+  echo "Type=Application" >> "$f"
+  echo "Name=${1}" >> "$f"
+  echo "Exec=${2}" >> "$f"
+  echo "Icon=${3}" >> "$f"
+  echo "Categories=${4}" >> "$f"
+  echo "Terminal=false" >> "$f"
+  update-desktop-database 2>/dev/null
+}
+
+#--- latest github release asset url matching a pattern
+function GHTool () {
+  curl -s "https://api.github.com/repos/${1}/releases/latest" | grep browser_download_url | grep -i "${2}" | head -1 | cut -d '"' -f4
+}
+
+
+#--Install steps (called by install-tools)------------------------------#
+
+##### dirs, PATH, debconf, and make sure the Kali repo + pinning are there
+function setupHost () {
+  #create dirs
+  mkdir -p ${outdir}
   mkdir -p /usr/share/wordlists/
-  cd ${outdir}
+  mkdir -p ${optdir}
+  chown ${user}:${user} ${optdir}
+  #--- put /opt/tools and ~/.local/bin (uv tools) on the user's PATH (idempotent)
+  grep -q "${optdir}" ${userhome}/.bashrc 2>/dev/null || echo "export PATH=\$PATH:${optdir}" >> ${userhome}/.bashrc
+  grep -q '.local/bin' ${userhome}/.bashrc 2>/dev/null || echo 'export PATH=$PATH:$HOME/.local/bin' >> ${userhome}/.bashrc
+  chown ${user}:${user} ${userhome}/.bashrc 2>/dev/null
 
-  echo -e "\n ${GREEN}[+]${RESET} Installing dependencies"
-  #list of dependencies and programing languages
-  deps=( curl git apt-transport-https build-essential gdb libpcap-dev golang p7zip-full unzip zip unrar snap ruby-dev gzip ruby python3 \
-         python3-pip python3-dev libssl-dev libffi-dev binutils patch ruby-dev \
-         zlib1g-dev liblzma-dev gpgv2 autoconf bison git-core libapr1 libaprutil1 \
-         libgmp3-dev libpcap-dev libpq-dev libreadline6-dev libsqlite3-dev libssl-dev libsvn1 libtool libxml2 libxml2-dev \
-         libxslt-dev libyaml-dev locate ncurses-dev openssl postgresql postgresql-contrib wget xsel zlib1g zlib1g-dev  )
+  #--- remove interactive yes/no prompts during instalation
+  export DEBIAN_FRONTEND=noninteractive
+  echo "wireshark-common wireshark-common/install-setuid boolean true" | debconf-set-selections
 
-  for x in ${deps[@]}; do echo -e "\n\n ${GREEN}[+]${RESET} Installing ${GREEN}${x}${RESET}"; apt-get -y -qq install ${x} || echo -e ' '${RED}'[!] Issue with apt-get'${RESET} 1>&2; done
-  
-  tools=( vim tmux zsh nmap masscan onesixtyone htop ca-certificates network-manager-openvpn network-manager-pptp \
-          network-manager-vpnc network-manager-openconnect gobuster network-manager-iodine hashid cewl bsdgames proxychains \
-          sshuttle apt-file apt-show-versions sqlmap sqlite3 ssldump fcrackzip john hydra cewl crunch hashid \
-          flasm nasm wfuzz dmitry nfs-common hping3 ncat dnsenum binwalk smbmap gparted \
-          enum4linux wireshark joomscan rubygems commix nikto exploitdb wfuzz hashcat \
-          smtp-user-enum websploit amap ssldump whois socat nishang traceroute dnsutils dnsrecon mysql-server)
-
-  for x in ${tools[@]}; do echo -e "\n\n ${GREEN}[+]${RESET} Installing ${GREEN}${x}${RESET}"; apt-get -y -qq install ${x} || echo -e ' '${RED}'[!] Issue with apt-get'${RESET} 1>&2; done
-
-  #snaptools=( cherrytree )
-  #for x in ${snaptools[@]}; do echo -e "\n\n ${GREEN}[+]${RESET} Installing ${GREEN}${x}${RESET}"; snap install $x || echo -e ' '${RED}'[!] Issue with snap install'${RESET} 1>&2; done
-
-  gems=( evil-winrm wpscan)
-  for x in ${gems[@]}; do echo -e "\n\n ${GREEN}[+]${RESET} Installing ${GREEN}${x}${RESET}"; gem install $x || echo -e ' '${RED}'[!] Issue with gem install'${RESET} 1>&2; done
-  
-  # updates cache
-  sudo apt-file update
-  
-  ##### Install vulscan script for nmap
-  echo -e "\n\n ${GREEN}[+]${RESET} Installing ${GREEN}vulscan script for nmap${RESET} ~ vulnerability scanner add-On"
-  if [ -d /usr/share/nmap/vulnscan ]; then
-    echo -e "${YELLOW} [i]${RESET} Already installed"
+  #--- make sure the Kali repo + pinning are there
+  if [ -f /etc/apt/sources.list.d/kali.sources ]; then
+    apt -y -qq update
   else
-    git clone https://github.com/scipag/vulscan /usr/share/nmap/scripts/vulscan
+    addKaliRepo
+  fi
+}
+
+##### apt deps, apt tools and ruby gems
+function installApt () {
+  ok "Installing dependencies"
+  for x in "${deps[@]}"; do dpkg -s "$x" &>/dev/null && continue; ok "Installing ${GREEN}${x}${RESET}"; apt -y -qq install "${x}" || err 'Issue with apt'; done
+  for x in "${tools[@]}"; do dpkg -s "$x" &>/dev/null && continue; ok "Installing ${GREEN}${x}${RESET}"; apt -y -qq install "${x}" || err 'Issue with apt'; done
+  #--- let your user run wireshark without root
+  usermod -aG wireshark ${user} 2>/dev/null
+  for x in "${gems[@]}"; do gem list -i "$x" &>/dev/null && continue; ok "Installing ${GREEN}${x}${RESET}"; gem install "$x" || err 'Issue with gem install'; done
+  #--- drop duplicate gem versions
+  gem cleanup 2>/dev/null
+}
+
+##### python tools via uv
+function installPython () {
+  installUv
+  # netexec builds a rust dep, so make sure cargo is there
+  sudo -u ${user} bash -lc '[ -x "$HOME/.cargo/bin/cargo" ] || curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'
+  for x in "${uvtools[@]}"; do uvInstall "$x"; done
+}
+
+##### webshells, p0wny-shell and the nmap vulscan script
+function installWebshells () {
+  ok "Installing ${GREEN}vulscan script for nmap${RESET} ~ vulnerability scanner add-On"
+  if [ -d /usr/share/nmap/scripts/vulscan ]; then
+    info "Already installed"
+  else
+    git clone -q https://github.com/scipag/vulscan /usr/share/nmap/scripts/vulscan
   fi
 
-  ##### clone webshells
-  echo -e "\n\n ${GREEN}[+]${RESET} cloning ${GREEN}webshells${RESET}"
+  ok "cloning ${GREEN}webshells${RESET}"
   if [ -d /usr/share/webshells ]; then
-    echo -e "${YELLOW} [i]${RESET} Already installed"
+    info "Already installed"
   else
-    git clone -q https://github.com/BlackArch/webshells /usr/share/webshells || echo -e ' '${RED}'[!] Issue when git cloning'${RESET} 1>&2
+    git clone -q https://github.com/BlackArch/webshells /usr/share/webshells || err 'Issue when git cloning'
   fi
 
-  ##### clone reGeorg
-  echo -e "\n\n ${GREEN}[+]${RESET} Installing ${GREEN}reGeorg${RESET} ~ pivot via web shells"
-  if [ -d /usr/share/webshells/reGeorg ]; then
-    echo -e "${YELLOW} [i]${RESET} Already installed"
+  ok "Cloning ${GREEN}p0wny-shell${RESET} ~ cool php shell"
+  if [ -d /usr/share/webshells/p0wny-shell ];then
+    info "Already installed"
   else
-    git clone -q https://github.com/sensepost/reGeorg.git /usr/share/webshells/reGeorg || echo -e ' '${RED}'[!] Issue when git cloning'${RESET} 1>&2
+    git clone -q https://github.com/flozz/p0wny-shell /usr/share/webshells/p0wny-shell || err 'Issue when git cloning'
   fi
+}
 
-  echo -e "\n\n ${GREEN}[+]${RESET} Cloning a bunch of ${GREEN}wordlists${RESET}"
+##### wordlists ~ seclists, dirbuster, usernames, rockyou
+function installWordlists () {
+  ok "Cloning a bunch of ${GREEN}wordlists${RESET} ~ seclists, dirbuster ..."
   #clone seclists
   if [ -d /usr/share/wordlists/SecLists ]; then
-    echo -e " ${YELLOW}[i]${RESET} Already cloned seclists"
+    info "Already cloned seclists"
   else
-    wget -cq https://github.com/danielmiessler/SecLists/archive/master.zip -O /usr/share/wordlists/SecList.zip
-    cd /usr/share/wordlists/ 
-    unzip -o /usr/share/wordlists/SecList.zip
-    mv SecLists-master SecLists
-    rm -f /usr/share/wordlists/SecList.zip
-    cd ~
+    git clone -q --depth 1 https://github.com/danielmiessler/SecLists.git /usr/share/wordlists/SecLists || err 'Issue when git cloning'
   fi
-  ##### Update wordlists
-  echo -e "\n\n ${GREEN}[+]${RESET} Cloning a bunch of ${GREEN}wordlists${RESET} ~ seclists, dirbuster ..."
   # wordlists from dirbuster
   if [ -d /usr/share/wordlists/dirbuster ]; then
-    echo -e " ${YELLOW}[i]${RESET} Already cloned dirbuster wordlists"
+    info "Already cloned dirbuster wordlists"
   else
     mkdir -p /usr/share/wordlists/dirbuster
-    git clone -q https://github.com/daviddias/node-dirbuster /usr/share/wordlists/dirbuster-git || echo -e ' '${RED}'[!] Issue when git cloning'${RESET} 1>&2
+    git clone -q https://github.com/daviddias/node-dirbuster /usr/share/wordlists/dirbuster-git || err 'Issue when git cloning'
     mv /usr/share/wordlists/dirbuster-git/lists/* /usr/share/wordlists/dirbuster
     rm -rf /usr/share/wordlists/dirbuster-git
   fi
-
   # usernames.txt
   if [ -f /usr/share/wordlists/usernames.txt ]; then
-    echo -e " ${YELLOW}[i]${RESET} Already downloaded usernames.txt"
+    info "Already downloaded usernames.txt"
   else
-    cd /usr/share/wordlists/
-    wget -c "https://raw.githubusercontent.com/jeanphorn/wordlist/master/usernames.txt" || echo -e ' '${RED}'[!] Issue when downloading'{RESET} 1>&2
+    cd /usr/share/wordlists/ || return
+    wget -c "https://raw.githubusercontent.com/jeanphorn/wordlist/master/usernames.txt" || err 'Issue when downloading'
     sed -ie "s/\r//g" usernames.txt
-
-  fi 
-  # more from dirbuster
-  if [ -f /usr/share/wordlists/dirbuster/big.txt ]; then
-    echo -e " ${YELLOW}[i]${RESET} Already cloned more dirbuster wordlists"
-  else
-    git clone -q https://github.com/digination/dirbuster-ng /usr/share/wordlists/dirbuster-git || echo -e ' '${RED}'[!] Issue when git cloning'${RESET} 1>&2
-    mkdir -p /usr/share/wordlists/dirbuster
-    mv /usr/share/wordlists/dirbuster-git/wordlists/* /usr/share/wordlists/dirbuster/
-    rm -rf /usr/share/wordlists/dirbuster-git
+    cd ${outdir} || return
   fi
-
   #--- Extract rockyou wordlist
   if [ -f /usr/share/wordlists/rockyou.txt ];then
-    echo -e "${YELLOW} [i]${RESET} Already installed"
+    info "Already installed"
   else
-    wget -qc https://github.com/praetorian-code/Hob0Rules/raw/master/wordlists/rockyou.txt.gz -O /usr/share/wordlists/rockyou.txt.gz || echo -e ' '${RED}'[!] Issue when donwloading'${RESET} 1>&2
+    wget -qc https://github.com/praetorian-code/Hob0Rules/raw/master/wordlists/rockyou.txt.gz -O /usr/share/wordlists/rockyou.txt.gz || err 'Issue when donwloading'
     gzip -dc < /usr/share/wordlists/rockyou.txt.gz > /usr/share/wordlists/rockyou.txt
     rm -rf /usr/share/wordlists/rockyou.txt.gz
   fi
+}
 
-  ##### pwn tools and upgrade pip
-  apt-get update
-  sudo -u ${user} python3 -m pip install -q --upgrade pip
-  sudo -u ${user} python3 -m pip install -q --upgrade git+https://github.com/Gallopsled/pwntools.git@dev
-
-  # Install impacket
-  echo -e "\n\n ${GREEN}[+]${RESET} Installing ${GREEN}impacket${RESET} ~ tools"
-  if [ -d ${optdir}/impacket ];then
-    echo -e "${YELLOW} [i]${RESET} Already installed"
-  else
-    #dependency for ldap3
-    sudo -u ${user} pip3 install pyasn1==0.4.6
-    git clone -q https://github.com/SecureAuthCorp/impacket ${optdir}/impacket || echo -e ' '${RED}'[!] Issue when git cloning'${RESET} 1>&2
-    sudo -u ${user}  pip3 install -q ${optdir}/impacket
-  fi
-
-  ##### Install peda
-  if [ -d ${outdir}/peda ];then
-    echo -e "${YELLOW} [i]${RESET} Already installed"
-  else
-    git clone https://github.com/longld/peda.git ${outdir}/peda
-    if [ -d ~/.gdbinit ];then
-      echo 'source '${outdir}'/peda/peda.py' >> ~/.gdbinit
-    fi
-    if [ -d ~${user}/.gdbinit ];then
-      echo 'source '${outdir}'/peda/peda.py' >> ~${user}/.gdbinit
-    fi
-  fi
-
-  ##### Clone p0wny-shell
-  echo -e "\n\n ${GREEN}[+]${RESET} Cloning ${GREEN}p0wny-shell${RESET} ~ cool php shell"
-  if [ -d /usr/share/webshells/p0wny-shell ];then
-    echo -e "${YELLOW} [i]${RESET} Already installed"
-  else
-    git clone -q https://github.com/flozz/p0wny-shell /usr/share/webshells/p0wny-shell || echo -e ' '${RED}'[!] Issue when git cloning'${RESET} 1>&2
-  fi
- 
-  ##### clone pspy
-  echo -e "\n\n ${GREEN}[+]${RESET} Cloning ${GREEN}pspy${RESET} ~ Monitor linux processes without root permissions "
+##### pspy ~ monitor linux processes without root
+function installPspy () {
+  ok "Cloning ${GREEN}pspy${RESET} ~ Monitor linux processes without root permissions "
   if [ -d ${optdir}/pspy ];then
-    echo -e "${YELLOW} [i]${RESET} Already installed"
+    info "Already installed"
   else
     mkdir -p ${optdir}/pspy
-    wget -qc https://github.com/DominicBreuker/pspy/releases/download/v1.2.0/pspy32 -O ${optdir}/pspy/pspy32 || echo -e ' '${RED}'[!] Issue with download'${RESET} 1>&2
-    wget -qc https://github.com/DominicBreuker/pspy/releases/download/v1.2.0/pspy64 -O ${optdir}/pspy/pspy64 || echo -e ' '${RED}'[!] Issue with download'${RESET} 1>&2
+    wget -qc https://github.com/DominicBreuker/pspy/releases/latest/download/pspy32 -O ${optdir}/pspy/pspy32 || err 'Issue with download'
+    wget -qc https://github.com/DominicBreuker/pspy/releases/latest/download/pspy64 -O ${optdir}/pspy/pspy64 || err 'Issue with download'
   fi
-  
-  ##### Clone theHarvester
-  echo -e "\n\n ${GREEN}[+]${RESET} Cloning ${GREEN}theHarvester${RESET} ~ E-mails, subdomains and names Harvester - OSINT "
-  if [ -d /etc/theHarvester ];then
-    echo -e "${YELLOW} [i]${RESET} Already installed"
-  else
-    git clone -q https://github.com/laramies/theHarvester || echo -e ' '${RED}'[!] Issue when git cloning'${RESET} 1>&2
-   
-    cd theHarvester
-    python3 -m pip install -r requirements/base.txt
-    cd ..
-    mv theHarvester /etc/theHarvester
-    echo "export PATH=$PATH:/etc/theHarvester" >> ~/.bashrc
-  fi
-  
-  ##### Metasploit-framework
-  #echo -e "\n${YELLOW} [i]${RESET} Installing ${GREEN}postgresql${RESET}"
-  #sudo apt update && sudo apt-get install -y postgresql postgresql-client || echo -e ' '${RED}'[!] Issue with apt-get'${RESET} 1>&2
-  #sudo service postgresql start && sudo update-rc.d postgresql enable
-  echo -e "\n${YELLOW} [i]${RESET} Installing ${GREEN}Metasploit-framework${RESET}"
-  # Note: metasploit package from parrot OS repo is broken so the installation is via the suggested from rapid7
-  # apt-get -y -qq install metasploit-framework || echo -e ' '${RED}'[!] Issue with apt-get'${RESET} 1>&2
-  # Instaliing recomendend from metasploit github
-  # https://github.com/rapid7/metasploit-framework/wiki/Nightly-Installers
-  curl https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb > msfinstall
-  chmod 755 msfinstall
-  ./msfinstall
-  rm msfinstall
- 
-  echo -e "\n${YELLOW} [i]${RESET} Configuring ${GREEN}Metasploit-framework${RESET}..."
-  msfdb init
-  
-  
-  ##### burpsuite how to install
-  echo -e "\n\n${YELLOW} [i]${RESET} How to install ${GREEN}burpsuite${RESET}"
-  echo -e "${YELLOW} [i]${RESET} Download from ${GREEN}https://portswigger.net/burp/releases${RESET}"
-  echo -e "${YELLOW} [i]${RESET} cd Downloads"
-  echo -e "${YELLOW} [i]${RESET} chmod +x the executable"
-  echo -e "${YELLOW} [i]${RESET} ./ it\n\n"
+}
 
+##### Go binaries (prebuilt releases) into /opt/tools ~ list is up top (gotools)
+function installGoTools () {
+  ok "Installing ${GREEN}Go tools${RESET}"
+  cd ${optdir} || return
+  for entry in "${gotools[@]}"; do
+    IFS='|' read -r repo pat type out <<< "$entry"
+    [ -f "$out" ] && continue
+    ok "Installing ${GREEN}${out}${RESET}"
+    url=$(GHTool "$repo" "$pat")
+    case $type in
+      raw) wget -qc "$url" -O "$out" && chmod +x "$out" ;;
+      gz)  wget -qc "$url" -O "$out.gz" && gzip -df "$out.gz" && chmod +x "$out" ;;
+      tar) wget -qc "$url" -O "$out.tgz" && tar -xzf "$out.tgz" "$out" && rm -f "$out.tgz" ;;
+      zip) wget -qc "$url" -O "$out.zip" && unzip -oq "$out.zip" "$out" && rm -f "$out.zip" ;;
+    esac
+  done
+}
+
+##### Metasploit-framework
+function installMetasploit () {
+  info "Installing ${GREEN}Metasploit-framework${RESET}"
+  # https://github.com/rapid7/metasploit-framework/wiki/Nightly-Installers
+  curl -fsSL https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb > /tmp/msfinstall
+  chmod 755 /tmp/msfinstall
+  /tmp/msfinstall
+  rm -f /tmp/msfinstall
+  # the omnibus sets up the db on first run
+}
+
+##### show BloodHound creds last
+function showCreds () {
+  [ -f ${optdir}/bloodhound/bloodhound-cli ] || return
+  bhpass=$( cd ${optdir}/bloodhound && ./bloodhound-cli config get default_password 2>/dev/null )
+  ok "${BOLD}BloodHound CE${RESET} ~ ${GREEN}http://127.0.0.1:8080/ui/login${RESET}"
+  ok "login ${GREEN}admin${RESET} / password ${GREEN}${bhpass}${RESET}"
+}
+
+##### Install tools (just runs the steps above in order)
+function install-tools () {
+  setupHost
+  installApt
+  installPython
+  installWebshells
+  installWordlists
+  installPspy
+  installGoTools
+  installMetasploit
+  [ "$install_bloodhound" = true ] && installBloodHound
+  [ "$install_ghidra" = true ] && installGhidra
+  [ "$install_burp" = true ] && installBurp
+  showCreds
+}
+
+##### Update everything ~ apt + uv + gems
+function updateEverything () {
+    update
+    upgrade
+    ok "Upgrading ${GREEN}uv tools${RESET}"
+    sudo -u ${user} bash -lc 'export PATH="$HOME/.local/bin:$PATH"; uv tool upgrade --all' || err 'Issue with uv'
+    ok "Updating ${GREEN}gems${RESET}"
+    gem update || err 'Issue with gem update'
 }
 
 function setPermissions() {
-    find /usr/share/wordlists/ -exec chown -v -R ${user}:${user} {} +
-    
-    find ${optdir}/impacket -exec chown -v -R ${user}:${user} {} \;
-    find ${optdir}/pspy -exec chown -v -R ${user}:${user} {} \;
-}
-
-function helpMessagePPA () {
-    clear
-    echo -e '\n '${YELLOW}'[i] Steps to set PPA permission.'${RESET}
-    echo -e '\n '${BOLD}${RED}'[!] Not doing this'${BOLD}' will'${RESET}${RED}' break you linux'${RESET}
-    
-    echo -e " ${GREEN}[*]${RESET} cd /etc/apt/preferences.d/"   
-    echo -e " ${GREEN}[*]${RESET} gedit parrot-pinning "   
-    echo -e " ${GREEN}[*]${RESET} set Pin-Priority of kali and Parrot to a number inferior of ubuntu and all others"
-    echo -e " ${GREEN}[*]${RESET} example: parrot and kali to 500 and ubuntu and others to 700\n\n"
+    chown -R ${user}:${user} /usr/share/wordlists/
+    chown -R ${user}:${user} ${optdir}
 }
 
 ##### Initial menu
 function menu () {
     #install
-    echo -e '\n '${YELLOW}'[i] Some downloads will fail, repeat step 4 until all are installed'${RESET}
-    echo -e '\n '${YELLOW}'[i]'${RESET}' '${BOLD}'Install - Choose one by one in order'${RESET}
-    echo -e ' '${BLUE}'[1]'${RESET}" Update and upgrade"
-    echo -e ' '${BLUE}'[2]'${RESET}" Add parrot-tools to apt"
-    echo -e ' '${BLUE}'[3]'${RESET}" Change PPA permissions manually"
-    echo -e ' '${BLUE}'[4]'${RESET}" Update and upgrade"
-    echo -e ' '${BLUE}'[5]'${RESET}" Install tools"
-    echo -e ' '${BLUE}'[6]'${RESET}" Clean system"
-    echo -e ' '${BLUE}'[7]'${RESET}" Set folders permissions"
-    
-    echo -e '\n '${BLUE}'[q]'${RESET}" exit\n"
+    echo -e '\n '${YELLOW}'[i] Some downloads might fail, repeat Install tools until all are installed'${RESET}
+    echo -e ' '${YELLOW}'[i]'${RESET}' '${BOLD}'Run [A] for everything, or the steps one by one'${RESET}
+    echo -e '\n '${BLUE}'[A]'${RESET}" Auto - do everything"
+    echo -e '\n '${BLUE}'[1]'${RESET}" Update and upgrade"
+    echo -e ' '${BLUE}'[2]'${RESET}" Add Kali repo to apt (auto keyring + pinning)"
+    echo -e ' '${BLUE}'[3]'${RESET}" Install tools"
+    echo -e ' '${BLUE}'[4]'${RESET}" Clean system"
+    echo -e ' '${BLUE}'[5]'${RESET}" Set folders permissions"
+
+    echo -e '\n '${BLUE}'[U]'${RESET}" Update everything (apt + uv + gems)"
+    echo -e ' '${BLUE}'[q]'${RESET}" exit\n"
     read -e -p  "$(echo -e ' '${BOLD}'[>]'${RESET}' ')" opt
 
     case $opt in
-      "1" | "4")
+      "A" | "a")
+          clear
           update
           upgrade
-          echo -e "\n ${BLUE}[*]${RESET} Done\n"
+          install-tools
+          setPermissions
+          hdr "Done"
+          menu
+        ;;
+      "1")
+          update
+          upgrade
+          hdr "Done"
           menu
         ;;
       "2")
-          addTools
-          echo -e "\n ${BLUE}[*]${RESET} Added tools\n"
+          addKaliRepo
+          hdr "Added Kali repo"
           menu
         ;;
       "3")
-          helpMessagePPA
-          menu
-        ;;
-      "5")
           clear
           install-tools
           menu
         ;;
-      "6")
+      "4")
           echo
           cleanSystem
           menu
         ;;
-      "7")
-          echo -e "\n ${BLUE}[*]${RESET} Setting permissions... This might take a while\n"
+      "5")
+          hdr "Setting permissions... This might take a while"
           setPermissions
+          menu
+        ;;
+      "U" | "u")
+          updateEverything
+          hdr "Done"
           menu
         ;;
       "exit" | "q")
           exit 0
-          echo
         ;;
       *)
           clear
-          echo -e '\n '${RED}'[!]'${RESET}" invalid opperation or invalid here\n"
+          err "invalid opperation or invalid here"
           menu
         ;;
     esac
